@@ -81,7 +81,9 @@
 --     Функция, преобразующая Vec A n в Fin n -> A, была реализована на лекции.
 --     Реализуйте обратную функцию.
 
-\func coin {A : \Type} {n : Nat} (f : Fin n -> A) : Vec A n => {?}
+\func coin {A : \Type} {n : Nat} (f : Fin n -> A) : Vec A n \elim n
+  | 0 => nil
+  | suc n => cons (f fzero) (coin {A} {n} {?})
 
 -- Optional task
 -- 8. Определите тип матриц и ряд функций над ними.
@@ -157,15 +159,15 @@
 \func List-elim {A : \Type}
                 (P : List A -> \Type)
                 (Hnil : P List.nil)
-                (Hcons : \Pi (a : A) (xs : List A) -> P (a :: xs))
+                (Hcons : \Pi (a : A) (xs : List A) -> P xs -> P (a :: xs))
                 (xs : List A) : P xs \elim xs
   | List.nil => Hnil
-  | a :: xs => Hcons a xs
+  | a :: xs => Hcons a xs (List-elim P Hnil Hcons xs)
 
 \func List-rec {A : \Type}
                (P : \Type)
                (Hnil : P)
-               (Hcons : \Pi (a : A) (xs : List A) -> P)
+               (Hcons : \Pi (a : A) (xs : List A) -> P -> P)
                (xs : List A) : P
   => List-elim (\lam _ => P) Hnil Hcons xs
 
