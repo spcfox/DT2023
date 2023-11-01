@@ -2,8 +2,6 @@
 \import Arith.Nat
 \import Data.List (List, length, ::)
 \import Function
-\import Logic
-\import Paths
 \import lect04
 \import Order.StrictOrder
 \open Nat(+,*)
@@ -83,29 +81,48 @@
 
 \func coin {A : \Type} {n : Nat} (f : Fin n -> A) : Vec A n \elim n
   | 0 => nil
-  | suc n => cons (f fzero) (coin {A} {n} {?})
+  | suc n => cons (f fzero) (coin (\lam fin => f (fsuc fin)))
 
 -- Optional task
 -- 8. Определите тип матриц и ряд функций над ними.
 
-\func Mat (A : \Type) (n m : Nat) : \Type => {?}
+\func Mat (A : \Type) (n m : Nat) : \Type =>
+  Fin n -> Fin m -> A
 
 -- диагональная матрица с элементами e на диагонали и z на остальных позициях.
 
-\func diag {A : \Type} (z e : A) (n : Nat) : Mat A n n => {?}
+\func diag {A : \Type} (z e : A) (n : Nat) : Mat A n n =>
+  \lam r c => if (finEq r c) e z
+  \where {
+    \func finEq {n : Nat} (f1 f2 : Fin n) : Bool
+      | {suc _}, fzero, fzero => true
+      | {suc _}, fsuc f1, fsuc f2 => finEq f1 f2
+      | _, _ => false
+  }
 
 -- транспонирование матриц
 
-\func transpose {A : \Type} {n m : Nat} (M : Mat A n m) : Mat A m n => {?}
+\func transpose {A : \Type} {n m : Nat} (M : Mat A n m) : Mat A m n =>
+  \lam r c => M c r
 
 -- сложение матриц
 
-\func matAdd {A : \Type} (add : A -> A -> A) (n m : Nat) (M N : Mat A n m) : Mat A n m => {?}
+\func matAdd {A : \Type} (add : A -> A -> A) (n m : Nat) (M N : Mat A n m) : Mat A n m =>
+  \lam r c => add (M r c) (N r c)
 
 -- умножение матриц
 
 -- z ─ нейтральный элемент по сложению.
-\func matMul {A : \Type} (z : A) (add mul : A -> A -> A) (n m k : Nat) (M : Mat A n m) (N : Mat A m k) : Mat A n k => {?}
+\func matMul {A : \Type} (z : A) (add mul : A -> A -> A) (n m k : Nat) (M : Mat A n m) (N : Mat A m k) : Mat A n k =>
+  \lam r c => finFold m add z (finZipWith mul (\lam k => M r k) (\lam k => N k c))
+  \where {
+    \func finFold {A B : \Type} (n : Nat) (f : A -> B -> B) (e : B) (xs : Fin n -> A) : B \elim n
+      | 0 => e
+      | suc n => f (xs fzero) (finFold n f e (\lam fin => xs (fsuc fin)))
+
+    \func finZipWith {A B C : \Type} {n : Nat} (f : A -> B -> C) (xs : Fin n -> A) (ys : Fin n -> B) : Fin n -> C =>
+      \lam k => f (xs k) (ys k)
+  }
 
 -- 9. Определите факториал через Nat-rec.
 
@@ -188,7 +205,8 @@
 
 \func Jalt {A : \Type} (B : \Pi (a a' : A) -> a = a' -> \Type)
            (b : \Pi (a : A) -> B a a idp)
-           {a a' : A} (p : a = a') : B a a' p => {?}
+           {a a' : A} (p : a = a') : B a a' p =>
+  J (B a) (b a) p
 
 -- Выразите J через Jalt. Можно пользоваться только Jalt, idp и всем, что через них выражается.
 -- Hint:
@@ -196,10 +214,13 @@
 -- b. Докажите, что тип \Sigma (x : A) (a = x) одноэлементный, то есть, что для любого p : \Sigma (x : A) (a = x) верно, что (x,idp) = p.
 -- c. Используя эти две конструкции, легко определить J.
 
-\func transport'' {A : \Type} (B : A -> \Type) {a a' : A} (p : a = a') (b : B a) : B a' => {?}
+\func transport'' {A : \Type} (B : A -> \Type) {a a' : A} (p : a = a') (b : B a) : B a' =>
+  {?}
 
-\func sigma-contr {A : \Type} {a : A} (p : \Sigma (x : A) (a = x)) : (a,idp) = {\Sigma (x : A) (a = x)} p => {?}
+\func sigma-contr {A : \Type} {a : A} (p : \Sigma (x : A) (a = x)) : (a,idp) = {\Sigma (x : A) (a = x)} p =>
+  {?}
 
 \func J' {A : \Type} {a : A} (B : \Pi (a' : A) -> a = a' -> \Type)
          (b : B a idp)
-         {a' : A} (p : a = a') : B a' p => {?}
+         {a' : A} (p : a = a') : B a' p =>
+  transport'' (\lam (x, y) => B x y) (sigma-contr (a', p)) b
