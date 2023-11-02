@@ -2,6 +2,7 @@
 \import Arith.Nat
 \import Data.List (List, length, ::)
 \import Function
+\import Paths.Meta
 \import lect04
 \import Order.StrictOrder
 \open Nat(+,*)
@@ -215,10 +216,12 @@
 -- c. Используя эти две конструкции, легко определить J.
 
 \func transport'' {A : \Type} (B : A -> \Type) {a a' : A} (p : a = a') (b : B a) : B a' =>
-  {?}
+  Jalt (\lam x y _ => B x -> B y) (\lam x => id) p b
 
 \func sigma-contr {A : \Type} {a : A} (p : \Sigma (x : A) (a = x)) : (a,idp) = {\Sigma (x : A) (a = x)} p =>
-  {?}
+  Jalt (\lam x y q => (x, idp) = {\Sigma (y : A) (x = y)} (y, q))
+       (\lam x => idp)
+       p.2
 
 \func J' {A : \Type} {a : A} (B : \Pi (a' : A) -> a = a' -> \Type)
          (b : B a idp)
