@@ -2,6 +2,7 @@
 \import Arith.Nat
 \import Data.List (List, length, ::)
 \import Function
+\import Meta
 \import Paths.Meta
 \import lect04
 \import Order.StrictOrder
@@ -128,7 +129,14 @@
 -- 9. Определите факториал через Nat-rec.
 
 \func fact (n : Nat) : Nat =>
-  Nat-rec Nat 1 (*) n
+  Nat-rec Nat 1 (\lam x y => suc x * y) n
+
+\func fact-test0 : fact 0 = 1 => idp
+\func fact-test1 : fact 1 = 1 => idp
+\func fact-test2 : fact 2 = 2 => idp
+\func fact-test3 : fact 3 = 6 => idp
+\func fact-test4 : fact 4 = 24 => idp
+\func fact-test5 : fact 5 = 120 => idp
 
 -- 10. Докажите ассоциативность сложения для натуральных чисел через Nat-elim.
 
