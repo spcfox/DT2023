@@ -1,24 +1,123 @@
+\import Algebra.Meta
+\import Arith.Nat
 \import Data.Bool
-\import Data.List \hiding (headDef)
+\import Data.List
+\import Data.Maybe
+\import Data.Or
+\import Function.Meta
+\import Logic (/=, absurd)
+\import Meta
+\import Order.PartialOrder
+\import Order.StrictOrder
+\import Paths
+\import Paths.Meta
+\import hw05
 \import hw06
+\import hw07 \hiding (swap, swap-involutive)
 \import lect08
 \import Order.LinearOrder
-\open LinearOrder
+\open Nat
+\open LinearOrder \hiding (<=)
+\open NatSemiring \hiding (<, <-irreflexive, <-transitive)
 
 -- 1. Реализуйте функцию filter и докажите ее корректность, то есть, что выполнены следующие условия:
 --    * filter p xs является подсписком xs
 --    * Все элементы filter p xs удовлетворяют предикату p
 --    * Любой подсписок xs с тем же свойством является подсписком filter p xs
 
+\func filter {A : \Type} (p : A -> Bool) (xs : List A) : List A \elim xs
+  | nil => nil
+  | a :: xs => \case p a \with {
+    | false => filter p xs
+    | true => a :: filter p xs
+  }
+
+\func filter-sublist {A : \Type} (p : A -> Bool) (xs : List A) : Sublist (filter p xs) xs \elim xs
+  | nil => sub-nil
+  | a :: xs => mcases \with {
+    | false => sub-skip (filter-sublist p xs)
+    | true => sub-head idp (filter-sublist p xs)
+  }
+
+\func filter-correct {A : \Type}
+                     (p : A -> Bool)
+                     (xs : List A)
+                     (x : A) :
+                     In x (filter p xs) -> So (p x) \elim xs
+  | nil => \lam x => \case x
+  | a :: xs => cases (p a arg addPath) \with {
+    | false, _ => filter-correct p xs x
+    | true, q => \lam in => \case in \with {
+      | in-head s => rewrite (s, q) ()
+      | in-tail i => filter-correct p xs x i
+    }
+  }
+
+\func filter-maximal {A : \Type}
+                     (p : A -> Bool)
+                     (xs ys : List A)
+                     (ys-sub-xs : Sublist ys xs)
+                     (ys-correct : \Pi (y : A) -> In y ys -> So (p y)) :
+                     Sublist ys (filter p xs) \elim xs, ys, ys-sub-xs
+  | xs, nil, sub-nil => sub-nil
+  | x :: xs, ys, sub-skip ys-sub-xs => mcases \with {
+    | false => filter-maximal p xs ys ys-sub-xs ys-correct
+    | true => sub-skip (filter-maximal p xs ys ys-sub-xs ys-correct)
+  }
+  | x :: xs, y :: ys, sub-head q ys-sub-xs => cases (p x arg addPath) \with {
+    | false, s => absurd (transport So s (ys-correct x (in-head (inv q))))
+    | true, _ => sub-head q (filter-maximal p xs ys ys-sub-xs \lam y y-in-ys => ys-correct y (in-tail y-in-ys))
+  }
+
 -- 2. Докажите, что Perm l1 l2 тогда и только тогда, когда Insertion.sort l1 = Insertion.sort l2.
+
+\func perm-sym {A : \Type} {l1 l2 : List A} (perm : Perm l1 l2) : Perm l2 l1 \elim l1, l2, perm
+  | nil, nil, perm-nil => perm-nil
+  | x :: l1, y :: l2, perm-cons p perm => perm-cons (inv p) (perm-sym perm)
+  | l1, l2, perm-trans perm1 perm2 => perm-trans (perm-sym perm2) (perm-sym perm1)
+  | x :: (x' :: l1), y :: (y' :: l2), perm-swap p q s => perm-swap (inv q) (inv p) (inv s)
+
+\func perm-SortEq {A : Dec} {l1 l2 : List A} (p : Insertion.sort l1 = Insertion.sort l2) : Perm l1 l2 =>
+  perm-trans (Insertion.sort-perm l1) (rewrite p (perm-sym (Insertion.sort-perm l2)))
+
+\func sortEq-perm {A : Dec} {l1 l2 : List A} (perm : Perm l1 l2) : Insertion.sort l1 = Insertion.sort l2 \elim l1, l2, perm
+  | nil, nil, perm-nil => idp
+  | x :: l1, y :: l2, perm-cons p perm => rewrite p (pmap (Insertion.sort.insert y) (sortEq-perm perm))
+  | l1, l2, perm-trans perm1 perm2 => sortEq-perm perm1 *> sortEq-perm perm2
+  | x :: (x' :: l1), y :: (y' :: l2), perm-swap p q s => rewrite (p, q, s) (Insertion.sort-perm.insert-comm y' y (Insertion.sort l2))
 
 -- 3. Докажите, что спецификация "результат является перестановкой входа и отсортирован" является полной для функции sort.
 
+\func insertion-sort-sorted {A : Dec} {l : List A} (s : Sorted l) : l = Insertion.sort l \elim l, s
+  | nil, _ => idp
+  | a :: l, sorted-cons a<=head s => rewriteI (insertion-sort-sorted s) (insert-head-sorted s a<=head)
+  \where {
+    \func insert-head-sorted {A : Dec} {l : List A} (s : Sorted l) {a : A}
+                             (a<=head : a <= Data.List.headDef a l) : a :: l = Insertion.sort.insert a l \elim l
+      | nil => idp
+      | a :: l => rewrite (dec<=_reduce a<=head) idp
+  }
+
 \func completeness {A : Dec} (sort : List A -> List A) (l : List A) (p : Perm l (sort l)) (s : Sorted (sort l)) : sort l = Insertion.sort l
-  => {?}
+  => rewrite (insertion-sort-sorted s) (sortEq-perm (perm-sym p))
 
 -- 4. Определите факториал через хвостовую рекурсию.
 --    Докажите, что он равен обычному определению факториала.
+
+\func factorial (n : Nat) => fact n 1
+    \where {
+      \func fact (n : Nat) (acc : Nat) : Nat \elim n
+        | 0 => acc
+        | suc n => fact n (suc n * acc)
+    }
+
+\func factorial-correct : factorial = fac
+  => ext \lam n => fact-correct *> ide-left
+  \where {
+    \func fact-correct {n acc : Nat} : factorial.fact n acc = acc * fac n \elim n
+      | 0 => idp
+      | suc n => fact-correct *> equation
+  }
 
 -- 5. Определите функцию, которая проверяет правильность скобочной последовательности.
 --    Докажите ее корректность.
@@ -26,12 +125,195 @@
 \data Paren | Left | Right
 
 \func isBalanced (xs : List Paren) : Bool
-  => {?}
+  => \case balance xs 0 \with {
+    | just 0 => true
+    | _ => false
+  }
+  \where {
+    \func balance (xs : List Paren) (b : Nat) : Maybe Nat
+      | nil, b => return b
+      | Left :: xs, b => balance xs (suc b)
+      | Right :: xs, 0 => nothing
+      | Right :: xs, suc b => balance xs b
+  }
 
 \data Balanced (xs : List Paren) \with
   | nil => nil-balanced
   | :: Left xs => cons-balanced {ys : List Paren} (Balanced ys) (xs = ys ++ Right :: nil)
   | xs => append-balanced {ys zs : List Paren} (Balanced ys) (Balanced zs) (xs = ys ++ zs)
 
+\data Prefix {A : \Type} (xs ys : List A) \elim xs, ys
+  | nil, ys => nil-prefix
+  | x :: xs, y :: ys => cons-prefix (x = y) (Prefix xs ys)
+  \where {
+    \func split {A : \Type} {xs ys : List A} (prefix : Prefix xs ys) :
+      \Sigma (zs : List A) (ys = xs ++ zs) \elim xs, ys, prefix
+      | nil, ys, nil-prefix => (ys, idp)
+      | x :: xs, y :: ys, cons-prefix idp prefix =>
+        \have (zs, p) => split prefix \in (zs, pmap (x ::) p)
+  }
+
+\func List-ind {A : \Type}
+               (P : List A -> \Type)
+               (H : \Pi (xs : List A) -> (\Pi (ys : List A) -> length ys < length xs -> P ys) -> P xs)
+               (xs : List A) : P xs
+  => aux xs xs <=-refl
+  \where {
+    \func aux (ys xs : List A) (p : length ys <= length xs) : P ys \elim xs
+      | nil => H ys \lam zs zs<ys => absurd linarith
+      | a :: xs => H ys \lam zs zs<ys => aux zs xs (<_suc_<= (<-transitive-left zs<ys p))
+  }
+
 \func isBalanced-correct (xs : List Paren) : (isBalanced xs = true) <-> Balanced xs
-  => {?}
+  => (Balanced-isBalanced xs, isBalanced-Balanced xs)
+  \where {
+    \open isBalanced (balance)
+
+    \func balance-++ {xs ys : List Paren} {n : Nat} :
+      balance (xs ++ ys) n = (balance xs n >>= balance ys) \elim xs, n
+      | nil, _ => idp
+      | Left :: xs, n => balance-++
+      | Right :: xs, 0 => idp
+      | Right :: xs, suc n => balance-++
+
+    \func balance-isBalanced {xs : List Paren} : isBalanced xs = true -> balance xs 0 = just 0
+      => unfold isBalanced $ mcases \with {
+        | just 0 => \lam _ => idp
+        | _ => \case __
+      }
+
+    \func isBalanced-balance {xs : List Paren} (balanced : balance xs 0 = just 0) : isBalanced xs = true =>
+      unfold isBalanced $ rewrite balanced idp
+
+    \func isBalanced-Balanced (xs : List Paren) (balanced : Balanced xs) : isBalanced xs = true =>
+      isBalanced-balance (keep-balance balanced 0)
+      \where {
+        \func keep-balance {xs : List Paren} (balanced : Balanced xs) (n : Nat) : balance xs n = just n \elim xs, balanced
+          | nil, nil-balanced => idp
+          | Left :: xs, cons-balanced {ys} balanced-ys p =>
+            balance xs (suc n)                              ==< pmap (balance __ (suc n)) p >==
+            balance (ys ++ Right :: nil) (suc n)            ==< balance-++ >==
+            (balance ys (suc n) >>= balance (Right :: nil)) ==< pmap (__ >>= _) (keep-balance balanced-ys (suc n)) >==
+            balance (Right :: nil) (suc n)                  ==< idp >==
+            just n                                          `qed
+          | xs, append-balanced {ys} {zs} balanced-ys balanced-zs p =>
+            balance xs n                  ==< pmap (balance __ n) p >==
+            balance (ys ++ zs) n          ==< balance-++ >==
+            (balance ys n >>= balance zs) ==< pmap (__ >>= _) (keep-balance balanced-ys n) >==
+            balance zs n                  ==< keep-balance balanced-zs n >==
+            just n                        `qed
+      }
+
+    \func Balanced-isBalanced : \Pi (xs : List Paren) -> isBalanced xs = true -> Balanced xs
+      => List-ind (\lam ys => isBalanced ys = true -> Balanced ys)
+          \lam xs H balanced => \case nil-or-End-Right balanced \with {
+            | inl xs=nil => rewrite xs=nil nil-balanced
+            | inr (ys, p) => \case split-balance ys 0 \with {
+              | inl (zs, prefix, q) =>
+                \have (us, r) => Prefix.split prefix
+                \in rewrite (p, r, ++-assoc)
+                    \have
+                      balanced-left => isBalanced-balance {Left :: zs} q |
+                      balanced-right => isBalanced-right {Left :: zs} (rewriteF (p, r, ++-assoc) balanced) balanced-left
+                    \in append-balanced
+                        (H (Left :: zs)
+                            (rewrite (p, r, length_++, length_++) linarith)
+                            balanced-left)
+                        (H (us ++ Right :: nil)
+                            (rewrite (p, r, length_++, length_++, length_++) linarith)
+                            balanced-right)
+                        idp
+              | inr h =>
+                rewrite p
+                    (cons-balanced
+                        (H ys (rewrite p (rewrite length_++ linarith))
+                            (inner-Balanced (inner-balace-isBalanced (rewriteI p balanced)) h))
+                        idp)
+            }
+          }
+      \where {
+        \func isBalanced-right {xs ys : List Paren}
+                               (balanced : isBalanced (xs ++ ys) = true)
+                               (balanced-xs : isBalanced xs = true) :
+          isBalanced ys = true =>
+          \have b => transport (__ = _) balance-++ (balance-isBalanced balanced) |
+          b-xs => balance-isBalanced balanced-xs
+          \in isBalanced-balance (rewriteI (rewriteF b-xs b) idp)
+
+        \func nil-or-End-Right {xs : List Paren} : isBalanced xs = true ->
+        Or (xs = nil) (\Sigma (ys : List Paren) (xs = Left :: ys ++ Right :: nil)) =>
+          unfold isBalanced \lam balanced => \case end-Right balanced \with {
+            | inl xs=nil => inl xs=nil
+            | inr (nil, p) => \case rewriteF p balanced
+            | inr (Left :: ys, p) => inr (ys, p)
+            | inr (Right :: ys, p) => \case rewriteF p balanced
+          }
+
+        \func end-Right {xs : List Paren} (balanced : isBalanced xs = true) :
+          Or (xs = nil) (\Sigma (ys : List Paren) (xs = ys ++ Right :: nil)) =>
+          end-Right-aux 0 (balance-isBalanced balanced)
+          \where {
+            \func end-Right-aux {xs : List Paren} (n : Nat) (balanced : balance xs n = just 0) :
+              Or (xs = nil) (\Sigma (ys : List Paren) (xs = ys ++ Right :: nil)) \elim xs, n
+              | nil, n => inl idp
+              | Left :: xs, n => \case end-Right-aux (suc n) balanced \with {
+                | inl xs=nil => \case rewriteF xs=nil balanced
+                | inr (ys, p) => inr (Left :: ys, pmap (Left ::) p)
+              }
+              | Right :: xs, 0 => \case balanced
+              | Right :: xs, suc n => \case end-Right-aux n balanced \with {
+                | inl xs=nil => inr (nil, pmap (Right ::) xs=nil)
+                | inr (ys, p) => inr (Right :: ys, pmap (Right ::) p)
+              }
+          }
+
+        \func split-balance (xs : List Paren) (n : Nat) :
+          Or (\Sigma (ys : List Paren) (Prefix ys xs) (balance ys (suc n) = just 0))
+              (\Pi (ys : List Paren) -> Prefix ys xs -> balance ys (suc n) /= just 0)
+        \elim xs, n
+          | nil, n => inr (\lam ys prefix p => \case \elim ys, prefix, p \with {
+            | nil, nil-prefix, ()
+          })
+          | Left :: xs, n => \case split-balance xs (suc n) \with {
+            | inl (ys, prefix, b) => inl (Left :: ys, cons-prefix idp prefix, b)
+            | inr b => inr \lam ys prefix => \case \elim ys, \elim prefix \with {
+              | nil, nil-prefix => \lam p => \case p
+              | a :: ys, cons-prefix idp prefix => b ys prefix
+            }
+          }
+          | Right :: xs, 0 => inl (Right :: nil, cons-prefix idp nil-prefix, idp)
+          | Right :: xs, (suc n) => \case split-balance xs n \with {
+            | inl (ys, prefix, b) => inl (Right :: ys, cons-prefix idp prefix, b)
+            | inr b => inr \lam ys prefix => \case \elim ys, \elim prefix \with {
+              | nil, nil-prefix => \lam p => \case p
+              | a :: ys, cons-prefix idp prefix => b ys prefix
+            }
+          }
+
+        \func inner-Balanced {xs : List Paren}
+                             (p : balance xs 1 = just 1)
+                             (h : \Pi (ys : List Paren) -> Prefix ys xs -> balance ys 1 /= just 0) :
+          isBalanced xs = true => isBalanced-balance (lower-balance p h)
+
+        \func lower-balance {xs : List Paren} {n : Nat}
+                            (p : balance xs (suc n) = just 1)
+                            (h : \Pi (ys : List Paren) -> Prefix ys xs -> balance ys (suc n) /= just 0) :
+          balance xs n = just 0 \elim xs, n
+          | nil, 0 => idp
+          | nil, suc n => \case p
+          | Left :: xs, n => lower-balance p (\lam ys prefix => h (Left :: ys) (cons-prefix idp prefix))
+          | Right :: xs, 0 => absurd (h (Right :: nil) (cons-prefix idp nil-prefix) idp)
+          | Right :: xs, suc n => lower-balance p (\lam ys prefix => h (Right :: ys) (cons-prefix idp prefix))
+
+        \func inner-balace-isBalanced {xs : List Paren} (balanced : isBalanced (Left :: xs ++ Right :: nil) = true) :
+          balance xs 1 = just 1 => inner-balance (balance-isBalanced {Left :: _} balanced)
+
+        \func inner-balance {xs : List Paren} {n : Nat} (balanced : balance (Left :: xs ++ Right :: nil) n = just 0) :
+          balance xs (suc n) = just 1 \elim xs, n
+          | nil, _ => pmap (Monad.fmap suc) balanced
+          | Left :: xs, _ => inner-balance balanced
+          | Right :: Left :: xs, 0 => inner-balance balanced
+          | Right :: Right :: xs, 0 => \case balanced
+          | Right :: xs, suc n => inner-balance balanced
+      }
+  }
