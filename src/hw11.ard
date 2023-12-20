@@ -1,13 +1,10 @@
 \import Data.Bool
 \import Equiv
-\import Equiv.Path
 \import Function
-\import Function.Meta
-\import Logic (<->, Empty, absurd)
+\import Logic (<->)
 \import Meta
-\import Paths (*>, *>_inv, ==<, >==, Jl, inv, pmap, qed)
+\import Paths (*>, *>_inv, inv, pmap)
 \import Paths.Meta
-\import hw06 (BoolFuncLem)
 \import lect10 (setLem)
 \import lect11
 \import Equiv.Univalence
