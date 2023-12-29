@@ -1,32 +1,125 @@
 \import Data.Bool
-\import lect12(isInj)
+\import Data.List
+\import Equiv (Retraction, Section)
+\import Equiv.Univalence
+\import Function
+\import Function.Meta
+\import Logic
+\import Meta
+\import Paths
+\import Paths.Meta
+\import lect12(equals~, in~, isInj)
 \import lect13
 
 -- 1. Докажите, что add x (add x s) = add x s и add x (add y s) = add y (add x s)
 
 \func add-idemp {S : SetSpec} (x : S.A) (s : S) : add x (add x s) = add x s
-  => {?}
+  => setExt \lam a =>
+      (\case add-univ __ \with {
+        | byLeft r => rewrite r add-head
+        | byRight r => r
+      },
+       add-tail)
 
 \func add-swap {S : SetSpec} (x y : S.A) (s : S) : add x (add y s) = add y (add x s)
-  => {?}
+  => setExt \lam a => (aux a y x, aux a x y)
+  \where {
+    \func aux (a x y : S.A) (h : S.isElem a (S.add y (S.add x s))) : S.isElem a (S.add x (S.add y s))
+      => \case add-univ h \with {
+        | byLeft r => rewrite r $ add-tail add-head
+        | byRight r => \case add-univ r \with {
+          | byLeft q => rewrite q add-head
+          | byRight q => add-tail $ add-tail q
+        }
+      }
+  }
 
 -- 2. Докажите, что множество подмножеств является инстансом SetSpec
 
-\func subsets {A : \Set} : SetSpec {A} (A -> \Prop)
-  => {?}
+\func subsets {A : \Set} : SetSpec {A} (A -> \Prop) \cowith
+  | empty _ => Empty
+  | add a f => \lam x => (x = a) || f x
+  | isElem a f => f a
+  | setExt h => ext \lam a => ext $ h a
+  | add-head => byLeft idp
+  | add-tail => \lam h => byRight h
+  | add-univ => id
+  | empty-univ => id
 
 -- 3. Докажите, что множество подмножеств является наибольшим инстансом, то есть любой другой вкладывается в него.
 
 \func subsets-largest (S : SetSpec) : \Sigma (f : S -> (S.A -> \Prop)) (isInj f)
-  => {?}
+  => (\lam s a => isElem a s,
+      \lam x y p => setExt \lam a =>
+          (\lam h => rewriteI (pmap (__ a) p) h,
+           \lam h => rewrite (pmap (__ a) p) h))
 
 -- 4. Определите функцию isEmpty для произвольного конечного множества и для ListSet.
 
-\func isEmptySet {S : FinSetSpec} (x : S) : Bool => {?}
+\func isEmptySet {S : FinSetSpec} (x : S) : Bool
+  => isEmptyListSet {S.A} (=-to-Equiv (inv listSet=Set) x)
 
-\func isEmptyListSet {A : \Set} (x : ListSet A) : Bool => {?}
+\func isEmptyListSet {A : \Set} (x : ListSet A) : Bool \elim x
+  | in~ l => \case l \with {
+    | nil => true
+    | x :: xs => false
+  }
+  | equals~ {l} {l'} r => cases (l arg addPath, l' arg addPath) \with {
+    | nil, _, nil, _ => idp
+    | nil, p, x :: _, q => \case rewrite p $ (r x).2 (rewrite q $ here idp)
+    | x :: _, p, nil, q => \case rewrite q $ (r x).1 (rewrite p $ here idp)
+    | _ :: _, _, _ :: _, _ => idp
+  }
 
 -- 5. Определите функцию union {A : \Set} : S -> S -> S для произвольного S (удовлетворяющего FinSetSpec) и для ListSet.
+
+\func unionSet {S : FinSetSpec} (x y : S) : S
+  => \let e : Equiv.Equiv => =-to-Equiv (inv $ listSet=Set {S})
+      \in e.ret $ unionListSet (e x) (e y)
+
+\func unionListSet {A : \Set} (x y : ListSet A) : ListSet A \elim x, y
+  | in~ x, in~ y => in~ (x ++ y)
+  | in~ x, equals~ {l} {l'} r => equals~ {_} {_} {x ++ l} {x ++ l'} $ EqList-append (\lam _ => (id, id)) r
+  | equals~ {l} {l'} r, in~ y => equals~ {_} {_} {l ++ y} {l' ++ y} $ EqList-append r (\lam _ => (id, id))
+
+\func In-append-left {A : \Set} {xs ys : List A} {a : A} (h : In a xs) : In a (xs ++ ys) \elim xs, h
+  | x :: xs, here p => here p
+  | x :: xs, there h => there (In-append-left h)
+
+\func In-append-right {A : \Set} {xs ys : List A} {a : A} (h : In a ys) : In a (xs ++ ys) \elim xs, ys, h
+  | nil, y :: ys, p => p
+  | x :: xs, y :: ys, p => there $ In-append-right p
+
+\func In-append {A : \Set} {xs ys : List A} {a : A} : In a (xs ++ ys) <-> (In a xs || In a ys) \elim xs
+  | nil =>
+    (byRight,
+     \case __ \with {
+       | byLeft in => \case in
+       | byRight in => in
+     })
+  | x :: xs =>
+    (\case __ \with {
+      | here p => byLeft $ here p
+      | there p => \case In-append.1 p \with {
+        | byLeft in => byLeft $ there in
+        | byRight in => byRight in
+      }
+    },
+     \case __ \with {
+       | byLeft in => In-append-left in
+       | byRight in => In-append-right {A} {x :: xs} {ys} in
+     })
+
+\func EqList-append {A : \Set} {x x' y y' : List A} (hx : EqList x x') (hy : EqList y y') : EqList (x ++ y) (x' ++ y')
+  => \lam a =>
+      (\lam h => \case In-append.1 h \with {
+        | byLeft in => In-append.2 $ byLeft $ (hx a).1 in
+        | byRight in => In-append.2 $ byRight $ (hy a).1 in
+      },
+       \lam h => \case In-append.1 h \with {
+        | byLeft in => In-append.2 $ byLeft $ (hx a).2 in
+        | byRight in => In-append.2 $ byRight $ (hy a).2 in
+      })
 
 -- 6. Определите функцию intersection {A : DecSet} : S -> S -> S для произвольного S (удовлетворяющего FinSetSpec) и для ListSet.
 
