@@ -1,13 +1,19 @@
+\import Algebra.Meta
+\import Arith.Nat
 \import Data.Bool
 \import Data.List
-\import Equiv (Retraction, Section)
+\import Equiv (Section)
 \import Equiv.Univalence
 \import Function
 \import Function.Meta
 \import Logic
+\import Logic.Meta
 \import Meta
+\import Order.PartialOrder
 \import Paths
 \import Paths.Meta
+\import Set \hiding (#)
+\import lect11 (DecEq)
 \import lect12(equals~, in~, isInj)
 \import lect13
 
@@ -57,7 +63,7 @@
 -- 4. Определите функцию isEmpty для произвольного конечного множества и для ListSet.
 
 \func isEmptySet {S : FinSetSpec} (x : S) : Bool
-  => isEmptyListSet {S.A} (=-to-Equiv (inv listSet=Set) x)
+  => isEmptyListSet (=-to-Equiv (inv listSet=Set) x)
 
 \func isEmptyListSet {A : \Set} (x : ListSet A) : Bool \elim x
   | in~ l => \case l \with {
@@ -74,13 +80,13 @@
 -- 5. Определите функцию union {A : \Set} : S -> S -> S для произвольного S (удовлетворяющего FinSetSpec) и для ListSet.
 
 \func unionSet {S : FinSetSpec} (x y : S) : S
-  => \let e : Equiv.Equiv => =-to-Equiv (inv $ listSet=Set {S})
+  => \let e : Equiv.Equiv => =-to-Equiv (inv listSet=Set)
       \in e.ret $ unionListSet (e x) (e y)
 
 \func unionListSet {A : \Set} (x y : ListSet A) : ListSet A \elim x, y
   | in~ x, in~ y => in~ (x ++ y)
-  | in~ x, equals~ {l} {l'} r => equals~ {_} {_} {x ++ l} {x ++ l'} $ EqList-append (\lam _ => (id, id)) r
-  | equals~ {l} {l'} r, in~ y => equals~ {_} {_} {l ++ y} {l' ++ y} $ EqList-append r (\lam _ => (id, id))
+  | in~ x, equals~ {l} {l'} r => equals~ {_} $ EqList-append (\lam _ => (id, id)) r
+  | equals~ {l} {l'} r, in~ y => equals~ {_} $ EqList-append r (\lam _ => (id, id))
 
 \func In-append-left {A : \Set} {xs ys : List A} {a : A} (h : In a xs) : In a (xs ++ ys) \elim xs, h
   | x :: xs, here p => here p
@@ -123,8 +129,126 @@
 
 -- 6. Определите функцию intersection {A : DecSet} : S -> S -> S для произвольного S (удовлетворяющего FinSetSpec) и для ListSet.
 
+\func intersectSet {S : FinSetSpec} (d : DecSet S.A) (xs ys : S) : S
+  => \let e : Equiv.Equiv => =-to-Equiv (inv listSet=Set)
+     \in e.ret $ intersectListSet (e xs) (e ys)
+
+\func intersectListSet {A : DecSet} (xs ys : ListSet A) : ListSet A \elim xs, ys
+  | in~ xs, in~ ys => in~ (intersectLists xs ys)
+  | in~ xs, equals~ {l} {l'} r => equals~ {_} $ EqList-intersection (\lam _ => (id, id)) r
+  | equals~ r, in~ ys => equals~ {_} $ EqList-intersection r (\lam _ => (id, id))
+
+
+\func intersectLists {A : DecSet} (xs ys : List A) : List A \elim xs
+  | nil => nil
+  | x :: xs => \case in-dec x ys \with {
+    | yes e => x :: intersectLists xs ys
+    | no n => intersectLists xs ys
+  }
+
+\func in-dec {A : DecSet} (a : A) (xs : List A) : Dec (In a xs) \elim xs
+  | nil => no \case __
+  | x :: xs => \case decideEq a x \with {
+    | yes e => yes $ here e
+    | no n => \case in-dec a xs \with {
+      | yes e' => yes $ there e'
+      | no n' => no $ \case __ \with {
+        | here p => absurd (n p)
+        | there i => absurd (n' i)
+      }
+    }
+  }
+
+\func intersectSpec {A : DecSet} {xs ys : List A} {a : A}
+  : In a (intersectLists xs ys) <-> (\Sigma (In a xs) (In a ys)) \elim xs
+  | nil => (\case __ \with {}, \case __.1)
+  | x :: xs => mcases \with {
+    | yes e =>
+      (\case __ \with {
+        | here p => rewrite p (here idp, e)
+        | there i => \case intersectSpec.1 i \with {
+          | (i1, i2) => (there i1, i2)
+        }
+      },
+       \case __ \with {
+         | (i1, i2) => \case i1 \with {
+           | here p => here p
+           | there i => there (intersectSpec.2 (i, i2))
+         }
+       })
+    | no n =>
+      (\case intersectSpec.1 __ \with {
+        | (i1, i2) => (there i1, i2)
+      },
+       \case __ \with {
+         | (i1, i2) => \case i1 \with {
+           | here p => absurd $ n $ rewriteI p i2
+           | there i => intersectSpec.2 (i, i2)
+         }
+       })
+  }
+
+\func EqList-intersection {A : DecSet} {xs xs' ys ys' : List A} (hx : EqList xs xs') (hy : EqList ys ys')
+  : EqList (intersectLists xs ys) (intersectLists xs' ys')
+  => \lam a =>
+      (\lam h => \case intersectSpec.1 h \with {
+        | (in-xs, in-ys) => intersectSpec.2 ((hx a).1 in-xs, (hy a).1 in-ys)
+      },
+       \lam h => \case intersectSpec.1 h \with {
+         | (in-xs, in-ys) => intersectSpec.2 ((hx a).2 in-xs, (hy a).2 in-ys)
+       })
+
 -- 7. Мы не можем определить функция size в общем случае, но мы можем определить предикат S -> Nat -> \Prop, соответствующий \lam xs n => size xs <= n.
 --    Задайте этот предикат и докажите, что он эквивалентен обычному определению, если A -- разрешимо и S -- конечно.
+
+\func size<= {S : SetSpec} (s : S) (n : Nat) : \Prop
+  => ∃ (l : List S.A) (listToSet l = s) (length l <= n)
+
+\func size {S : FinSetSpec} {d : DecSet S.A} (s : S) : Nat
+  => size-ListSet (=-to-Equiv (inv listSet=Set) s)
+
+\func size-ListSet {A : DecSet} (xs : ListSet A) : Nat \elim xs
+  | in~ l => length (unique l nil)
+  | equals~ r => size-ListSet-correct r
+
+\func unique {A : DecSet} (xs : List A) (acc : List A) : List A \elim xs
+  | nil => acc
+  | x :: xs => \case in-dec x acc \with {
+    | yes e => unique xs acc
+    | no n => unique xs (x :: acc)
+  }
+
+-- С таким определением size выходят довольно неприятные доказательства, так что я не стал доделывать
+
+\func size-ListSet-correct {A : DecSet} {xs ys acc : List A} (r : EqList xs ys)
+  : length (unique xs acc) = length (unique ys acc)
+  => {?}
+
+\func unique-correct {A : DecSet} (xs acc : List A) (a : A) (h : In a xs) : In a (unique xs acc) \elim xs
+  | nil => \case h
+  | x :: xs => mcases \with {
+    | yes e => \case h \with {
+      | here p => {?}
+      | there i => {?}
+    }
+    | no n => {?}
+  }
+
+\func unique-complete {A : DecSet} (xs l : List A) (h : \Pi (a : A) -> In a xs -> In a l)
+  : length xs <= length l \elim xs
+  | nil => zero<=_
+  | x :: xs => {?}
+
+\func size-correct {S : FinSetSpec} (d : DecSet S.A) (s : S) (n : Nat) : (s `size<=` n) <-> (size s <= n)
+  => (\case __ \with {
+       | inP (l, p, length<=n) => <=∘ (rewriteI p $ listToSet-size l) length<=n
+     },
+      \lam size<=n => cases (=-to-Equiv (inv listSet=Set) s arg addPath) \with {
+        | in~ l, p => inP (unique l nil, {?}, {?})
+      })
+
+\func listToSet-size {S : FinSetSpec} {d : DecSet S.A} (l : List S.A) : size (listToSet l) <= length l
+  => {?}
 
 -- Optional
 -- 8. Определите предикат isFin : \Type -> \Prop так, чтобы множество \Sigma (P : A -> \Prop) (isFin (\Sigma (a : A) (P a))) удовлетворяло FinSetSpec, определите этот инстанс.
